@@ -13,9 +13,10 @@ ARG UBUNTU_MIRROR
 RUN apt-get -q update && \
     apt-get -q dist-upgrade -y && \
     DEBIAN_FRONTEND=noninteractive \
-    apt-get -q install --no-install-recommends -y ca-certificates git locales python3 sudo tzdata && \
+    apt-get -q install --no-install-recommends -y ca-certificates cron git locales python3 sudo tzdata && \
     touch /var/mail/ubuntu && chown ubuntu /var/mail/ubuntu && userdel -r ubuntu && \
-    useradd -d /home/zulip -m zulip -u 1000
+    useradd -d /home/zulip -m zulip -u 1000 && \
+    sed -i -E 's/^(session\s+required\s+pam_loginuid.so)/# \1/' /etc/pam.d/cron
 
 FROM base AS build
 

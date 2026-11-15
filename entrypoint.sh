@@ -39,6 +39,8 @@ normalize_bool() {
 
 ## Settings
 
+DATA_DIR="${DATA_DIR:-/data}"
+
 # PostgreSQL
 SETTING_REMOTE_POSTGRES_HOST="${SETTING_REMOTE_POSTGRES_HOST:-127.0.0.1}"
 SETTING_REMOTE_POSTGRES_SSLMODE="${SETTING_REMOTE_POSTGRES_SSLMODE:-prefer}"
@@ -488,13 +490,35 @@ zulipConfiguration() {
     done
     echo "Zulip configuration succeeded."
 }
+writeCronSupervisorConf() {
+    # Generate the supervisord drop-in that runs cron as a background
+    # service.  Written into /etc/supervisor/conf.d/ (not the puppet-purged
+    # /etc/supervisor/conf.d/zulip/ subdir) so it survives the
+    # zulip-puppet-apply run on each container start.
+    cat >/etc/supervisor/conf.d/cron.conf <<EOF
+[program:cron]
+command=/usr/sbin/cron -f
+autostart=true
+autorestart=true
+user=root
+stdout_logfile=/dev/fd/1
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+EOF
+}
 autoBackupConfiguration() {
     if [ "$AUTO_BACKUP_ENABLED" != "True" ]; then
         rm -f /etc/cron.d/autobackup
         echo "Auto backup is disabled. Continuing."
         return 0
     fi
-    printf 'MAILTO=""\n%s cd /;/sbin/entrypoint.sh app:backup\n' "$AUTO_BACKUP_INTERVAL" >/etc/cron.d/autobackup
+    cat >/etc/cron.d/autobackup <<EOF
+MAILTO=""
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DATA_DIR="$DATA_DIR"
+$AUTO_BACKUP_INTERVAL root cd / && /sbin/entrypoint.sh app:backup
+EOF
+    chmod 0644 /etc/cron.d/autobackup
     echo "Auto backup enabled."
 }
 waitingForDatabase() {
@@ -632,6 +656,7 @@ bootstrapEnvironment() {
         exit 1
     fi
     autoBackupConfiguration
+    writeCronSupervisorConf
 }
 initialConfiguration() {
     echo "=== Begin Initial Configuration Phase ==="
